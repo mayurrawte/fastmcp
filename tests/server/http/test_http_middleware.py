@@ -211,3 +211,44 @@ async def test_multiple_middleware_ordering():
         assert response.status_code == 200
         assert response.headers["X-First-Header"] == "first"
         assert response.headers["X-Second-Header"] == "second"
+
+
+async def test_add_middleware_method():
+    """Middleware added via FastMCP.add_middleware is applied."""
+    server = FastMCP(name="TestServer")
+
+    server.add_middleware(HeaderMiddleware, header_name="X-Added", header_value="added")
+
+    routes: list[BaseRoute] = [Route("/test", endpoint_handler)]
+    server._additional_http_routes = routes
+
+    app = server.http_app(transport="sse")
+
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/test")
+
+        assert response.status_code == 200
+        assert response.headers["X-Added"] == "added"
+
+
+async def test_add_middleware_combines_with_http_app():
+    """Middleware added via add_middleware is combined with http_app middleware."""
+    server = FastMCP(name="TestServer")
+
+    server.add_middleware(HeaderMiddleware, header_name="X-First", header_value="first")
+
+    extra = [Middleware(HeaderMiddleware, header_name="X-Second", header_value="second")]
+
+    routes: list[BaseRoute] = [Route("/test", endpoint_handler)]
+    server._additional_http_routes = routes
+
+    app = server.http_app(transport="sse", middleware=extra)
+
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/test")
+
+        assert response.status_code == 200
+        assert response.headers["X-First"] == "first"
+        assert response.headers["X-Second"] == "second"

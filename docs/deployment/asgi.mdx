@@ -94,13 +94,12 @@ from starlette.middleware.cors import CORSMiddleware
 # Create your FastMCP server
 mcp = FastMCP("MyServer")
 
-# Define custom middleware
-custom_middleware = [
-    Middleware(CORSMiddleware, allow_origins=["*"]),
-]
+# Register middleware globally
+mcp.add_middleware(CORSMiddleware, allow_origins=["*"])
 
-# Create ASGI app with custom middleware
-http_app = mcp.http_app(middleware=custom_middleware)
+# You can also pass additional middleware when creating the ASGI app
+extra_middleware = [Middleware(CORSMiddleware, allow_origins=["https://example.com"])]
+http_app = mcp.http_app(middleware=extra_middleware)
 ```
 
 
