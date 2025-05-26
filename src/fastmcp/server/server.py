@@ -161,6 +161,7 @@ class FastMCP(Generic[LifespanResultT]):
         )
         self._mounted_servers: dict[str, MountedServer] = {}
         self._additional_http_routes: list[BaseRoute] = []
+        self._middleware: list[Middleware] = []
         self._tool_manager = ToolManager(
             duplicate_behavior=on_duplicate_tools,
             serializer=tool_serializer,
@@ -300,6 +301,20 @@ class FastMCP(Generic[LifespanResultT]):
             prompts.update(self._prompt_manager.get_prompts())
             self._cache.set("prompts", prompts)
         return prompts
+
+    def add_middleware(self, middleware_class: type, **options: Any) -> None:
+        """Register a Starlette middleware for HTTP apps.
+
+        Middleware added here will be applied to all ASGI apps created by
+        :meth:`http_app`, :meth:`sse_app`, :meth:`streamable_http_app`, and
+        :meth:`run_http_async`.
+
+        Args:
+            middleware_class: The middleware class to add.
+            **options: Options passed to the middleware constructor.
+        """
+
+        self._middleware.append(Middleware(middleware_class, **options))
 
     def custom_route(
         self,
@@ -874,6 +889,7 @@ class FastMCP(Generic[LifespanResultT]):
             DeprecationWarning,
             stacklevel=2,
         )
+        combined = self._middleware + (middleware or [])
         return create_sse_app(
             server=self,
             message_path=message_path or self.settings.message_path,
@@ -881,7 +897,7 @@ class FastMCP(Generic[LifespanResultT]):
             auth_server_provider=self._auth_server_provider,
             auth_settings=self.settings.auth,
             debug=self.settings.debug,
-            middleware=middleware,
+            middleware=combined,
         )
 
     def streamable_http_app(
@@ -921,6 +937,7 @@ class FastMCP(Generic[LifespanResultT]):
             A Starlette application configured with the specified transport
         """
 
+        combined_middleware = self._middleware + (middleware or [])
         if transport == "streamable-http":
             return create_streamable_http_app(
                 server=self,
@@ -931,7 +948,7 @@ class FastMCP(Generic[LifespanResultT]):
                 json_response=self.settings.json_response,
                 stateless_http=self.settings.stateless_http,
                 debug=self.settings.debug,
-                middleware=middleware,
+                middleware=combined_middleware,
             )
         elif transport == "sse":
             return create_sse_app(
@@ -941,7 +958,7 @@ class FastMCP(Generic[LifespanResultT]):
                 auth_server_provider=self._auth_server_provider,
                 auth_settings=self.settings.auth,
                 debug=self.settings.debug,
-                middleware=middleware,
+                middleware=combined_middleware,
             )
 
     async def run_streamable_http_async(
